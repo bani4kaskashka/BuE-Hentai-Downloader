@@ -6,10 +6,14 @@ Downloads galleries from e-hentai as images. Useful if torrents aren't an option
 - Supports both public and logged-in downloads
 - Original resolution downloads (requires account with GP)
 - Concurrent downloads (3 images at a time by default)
-- Automatic retries on failure with backoff
-- Validates downloads to catch corrupt files
-- Detects rate limiting and slows down automatically
+- Per-thread sessions (no shared state between workers)
+- Automatic retries with backoff on every request
+- Validates downloads to catch corrupt/incomplete files
+- Detects rate limiting, bans, and login walls explicitly
+- Fallback image selectors if the primary one fails
+- Live progress bar with ok/failed/skip counts
 - Batch mode - download a whole list of galleries from a text file
+- Retry failed pages only, without re-downloading everything
 - Skips already downloaded files so interrupted downloads can be resumed
 - Optional config file to save your preferred settings
 
@@ -79,6 +83,16 @@ https://e-hentai.org/g/ZZZZZ/ZZZZZZZZZZ/
 
 Then choose "y" when `run.bat` asks about URL list mode and point it to that file.
 
+### Retrying failed pages
+
+If some pages fail during a download, a `failed.txt` file is saved inside the gallery folder. To retry just those pages without re-downloading everything:
+
+```
+python downloader.py --retry-failed "downloads/Gallery Title Here"
+```
+
+The gallery URL is read automatically from `failed.txt`. You can also override it by passing the URL as an extra argument.
+
 ---
 
 ## Terminal usage
@@ -89,16 +103,17 @@ For more control you can run the script directly:
 python downloader.py "<gallery url>" [options]
 
 Options:
-  --output, -o    Output directory (default: ./downloads)
-  --delay         Seconds to wait between requests per worker (default: 1.0)
-  --workers       Number of parallel downloads (default: 3)
-  --retries       Retry attempts per request (default: 3)
-  --cookies       Full cookie string from browser console
-  --member-id     ipb_member_id cookie value (alternative to --cookies)
-  --pass-hash     ipb_pass_hash cookie value (alternative to --cookies)
-  --hires         Download original resolution (requires login)
-  --batch         Path to a .txt file with one URL per line
-  --log-file      Save log output to a file
+  --output, -o      Output directory (default: ./downloads)
+  --delay           Seconds to wait between requests per worker (default: 1.0)
+  --workers         Number of parallel downloads (default: 3)
+  --retries         Retry attempts per request (default: 3)
+  --cookies         Full cookie string from browser console
+  --member-id       ipb_member_id cookie value (alternative to --cookies)
+  --pass-hash       ipb_pass_hash cookie value (alternative to --cookies)
+  --hires           Download original resolution (requires login)
+  --batch           Path to a .txt file with one URL per line
+  --retry-failed    Path to a gallery folder to retry failed pages
+  --log-file        Save log output to a file
 ```
 
 Example:
@@ -128,8 +143,19 @@ Any setting in `config.json` becomes your new default. CLI arguments and `run.ba
 
 ---
 
+## Project structure
+
+```
+downloader.py   main entry point and orchestration
+session.py      session creation, cookie handling, HTTP retries
+scraper.py      HTML parsing, image URL extraction, page issue detection
+run.bat         interactive launcher for Windows
+```
+
+---
+
 ## Notes
 
-- Increasing `--workers` speeds things up but be reasonable, going too high risks getting rate limited
+- Increasing `--workers` speeds things up but going too high risks getting rate limited
 - If you keep getting rate limited, increase `--delay` or reduce `--workers`
 - Original resolution downloads cost GP on your e-hentai account

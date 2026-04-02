@@ -8,22 +8,14 @@ from pathlib import Path
 from threading import Lock
 from urllib.parse import urlparse
 
-import requests
-from bs4 import BeautifulSoup
 from tqdm import tqdm
 
+from session import make_session, get_thread_session, fetch_with_retry, DEFAULT_RETRIES
+from scraper import fetch_gallery, fetch_image_url
+
 MIN_FILE_SIZE = 1024
-DEFAULT_RETRIES = 3
 DEFAULT_WORKERS = 3
 DEFAULT_DELAY = 1.0
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    )
-}
 
 log = logging.getLogger(__name__)
 
@@ -40,104 +32,7 @@ def sanitize_name(name):
     return re.sub(r'[<>:"/\\|?*]', "_", name).strip()
 
 
-def parse_cookie_string(s):
-    cookies = {}
-    for part in s.split(";"):
-        if "=" in part:
-            k, v = part.strip().split("=", 1)
-            cookies[k.strip()] = v.strip()
-    return cookies
-
-
-def make_session(member_id=None, pass_hash=None, cookie_str=None):
-    session = requests.Session()
-    if cookie_str:
-        for k, v in parse_cookie_string(cookie_str).items():
-            session.cookies.set(k, v, domain=".e-hentai.org")
-    elif member_id and pass_hash:
-        session.cookies.set("ipb_member_id", member_id, domain=".e-hentai.org")
-        session.cookies.set("ipb_pass_hash", pass_hash, domain=".e-hentai.org")
-    return session
-
-
-def fetch_with_retry(session, url, retries=DEFAULT_RETRIES, stream=False):
-    last_err = None
-    for attempt in range(1, retries + 1):
-        try:
-            resp = session.get(url, headers=HEADERS, stream=stream, timeout=30)
-            if resp.status_code == 429:
-                wait = 15 * attempt
-                tqdm.write(f"  [warn] Rate limited. Waiting {wait}s (attempt {attempt}/{retries})")
-                time.sleep(wait)
-                continue
-            resp.raise_for_status()
-            return resp
-        except requests.Timeout:
-            last_err = f"timed out (attempt {attempt}/{retries})"
-        except requests.HTTPError as e:
-            last_err = f"HTTP {e.response.status_code} (attempt {attempt}/{retries})"
-        except requests.RequestException as e:
-            last_err = f"{e} (attempt {attempt}/{retries})"
-        if attempt < retries:
-            time.sleep(2 ** attempt)
-    raise requests.RequestException(last_err)
-
-
-def fetch_gallery(session, gallery_url, retries=DEFAULT_RETRIES):
-    viewer_urls = []
-    title = None
-    url = gallery_url
-
-    while url:
-        resp = fetch_with_retry(session, url, retries=retries)
-        soup = BeautifulSoup(resp.text, "html.parser")
-
-        if title is None:
-            tag = soup.find("h1", id="gn")
-            if tag:
-                title = tag.get_text(strip=True)
-
-        gdt = soup.find("div", id="gdt")
-        if gdt:
-            for a in gdt.find_all("a", href=True):
-                if "/s/" in a["href"]:
-                    viewer_urls.append(a["href"])
-        else:
-            log.warning("Could not find image grid — page structure may have changed.")
-
-        next_url = None
-        pager = soup.find("table", class_="ptt")
-        if pager:
-            for td in pager.find_all("td"):
-                a = td.find("a")
-                if a and a.get_text(strip=True) == ">":
-                    next_url = a["href"]
-                    break
-        url = next_url
-
-    return title or "gallery", viewer_urls
-
-
-def fetch_image_url(session, viewer_url, hires=False, retries=DEFAULT_RETRIES):
-    resp = fetch_with_retry(session, viewer_url, retries=retries)
-    soup = BeautifulSoup(resp.text, "html.parser")
-
-    if hires:
-        div = soup.find("div", id="i7")
-        if div:
-            a = div.find("a", href=True)
-            if a:
-                return a["href"]
-        tqdm.write("  [warn] Original resolution link not found, falling back to standard.")
-
-    img = soup.find("img", id="img")
-    if img and img.get("src"):
-        return img["src"]
-
-    return None
-
-
-def download_image(session, img_url, dest, retries=DEFAULT_RETRIES):
+def download_file(session, img_url, dest, retries=DEFAULT_RETRIES):
     resp = fetch_with_retry(session, img_url, retries=retries, stream=True)
     tmp = dest.with_suffix(".tmp")
     try:
@@ -156,27 +51,54 @@ def download_image(session, img_url, dest, retries=DEFAULT_RETRIES):
 
 
 def process_page(task):
-    session, viewer_url, folder, base, hires, retries, delay = task
+    viewer_url, folder, base, hires, retries, delay, cookie_kwargs = task
 
     if list(folder.glob(f"{base}.*")):
-        return base, "skipped", None
+        return viewer_url, "skipped", None
 
     try:
+        session = get_thread_session(cookie_kwargs)
         img_url = fetch_image_url(session, viewer_url, hires=hires, retries=retries)
         if not img_url:
-            return base, "error", "No image URL found on viewer page"
+            return viewer_url, "error", "No image URL found on viewer page"
         ext = Path(urlparse(img_url).path).suffix or ".jpg"
-        download_image(session, img_url, folder / f"{base}{ext}", retries=retries)
+        download_file(session, img_url, folder / f"{base}{ext}", retries=retries)
         time.sleep(delay)
-        return base, "ok", None
+        return viewer_url, "ok", None
     except Exception as e:
-        return base, "error", str(e)
+        return viewer_url, "error", str(e)
 
 
-def download_gallery(session, gallery_url, output, delay, hires, retries, workers):
+def save_failed(folder, failed_viewer_urls, gallery_url):
+    path = folder / "failed.txt"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(f"# gallery: {gallery_url}\n")
+        for url in failed_viewer_urls:
+            f.write(url + "\n")
+    log.info(f"Saved failed URLs to: {path}")
+
+
+def load_failed(folder):
+    path = Path(folder) / "failed.txt"
+    if not path.exists():
+        return None, []
+    gallery_url = None
+    failed = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if line.startswith("# gallery:"):
+            gallery_url = line.split("# gallery:", 1)[1].strip()
+        elif line and not line.startswith("#"):
+            failed.append(line)
+    return gallery_url, failed
+
+
+def download_gallery(cookie_kwargs, gallery_url, output, delay, hires, retries, workers, retry_urls=None):
+    session = make_session(**cookie_kwargs)
+
     log.info(f"Fetching: {gallery_url}")
-    title, viewer_urls = fetch_gallery(session, gallery_url, retries=retries)
-    total = len(viewer_urls)
+    title, all_viewer_urls = fetch_gallery(session, gallery_url, retries=retries)
+    total = len(all_viewer_urls)
 
     if total == 0:
         log.error("No images found. Check the URL or your login cookies.")
@@ -185,32 +107,51 @@ def download_gallery(session, gallery_url, output, delay, hires, retries, worker
     folder = Path(output) / sanitize_name(title)
     folder.mkdir(parents=True, exist_ok=True)
 
-    res_label = "original" if hires else "standard"
-    log.info(f"Saving {total} images [{res_label}] to: {folder}")
-
     pad = len(str(total))
+
+    if retry_urls:
+        url_to_idx = {url: i + 1 for i, url in enumerate(all_viewer_urls)}
+        work = [(url_to_idx[url], url) for url in retry_urls if url in url_to_idx]
+        unmatched = len(retry_urls) - len(work)
+        if unmatched:
+            log.warning(f"{unmatched} failed URL(s) no longer found in gallery (skipped).")
+        if not work:
+            log.error("No failed URLs matched the current gallery.")
+            return
+        log.info(f"Retrying {len(work)} failed page(s).")
+    else:
+        work = list(enumerate(all_viewer_urls, start=1))
+
+    res_label = "original" if hires else "standard"
+    log.info(f"Saving {len(work)} images [{res_label}] to: {folder}")
+
     tasks = [
-        (session, url, folder, str(i).zfill(pad), hires, retries, delay)
-        for i, url in enumerate(viewer_urls, start=1)
+        (viewer_url, folder, str(idx).zfill(pad), hires, retries, delay, cookie_kwargs)
+        for idx, viewer_url in work
     ]
 
-    failed = []
+    stats = {"ok": 0, "skipped": 0, "error": 0}
+    failed_viewer_urls = []
     lock = Lock()
 
-    with tqdm(total=total, unit="img") as bar:
+    with tqdm(total=len(tasks), unit="img") as bar:
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {pool.submit(process_page, t): t for t in tasks}
             for future in as_completed(futures):
-                base, status, msg = future.result()
+                viewer_url, status, msg = future.result()
                 with lock:
+                    stats[status] += 1
                     if status == "error":
-                        failed.append(base)
-                        tqdm.write(f"  [error] page {base}: {msg}")
+                        failed_viewer_urls.append(viewer_url)
+                        tqdm.write(f"  [error] {msg}")
+                    bar.set_postfix(ok=stats["ok"], failed=stats["error"], skip=stats["skipped"])
                     bar.update(1)
 
-    if failed:
-        log.warning(f"{len(failed)} page(s) failed: {', '.join(failed)}")
-    log.info("Done.")
+    log.info(f"Finished: {stats['ok']} ok, {stats['skipped']} skipped, {stats['error']} failed.")
+
+    if failed_viewer_urls:
+        save_failed(folder, failed_viewer_urls, gallery_url)
+        log.info(f'To retry: python downloader.py --retry-failed "{folder}"')
 
 
 def load_config(path="config.json"):
@@ -227,13 +168,14 @@ def main():
     parser = argparse.ArgumentParser(description="Download e-hentai galleries as images.")
     parser.add_argument("urls", nargs="*", help="One or more gallery URLs")
     parser.add_argument("--batch", help="Path to a .txt file with one gallery URL per line")
+    parser.add_argument("--retry-failed", metavar="FOLDER", help="Retry failed pages from a previous run (pass the gallery folder path)")
     parser.add_argument("--output", "-o", default=cfg.get("output", "./downloads"))
     parser.add_argument("--delay", type=float, default=cfg.get("delay", DEFAULT_DELAY))
     parser.add_argument("--retries", type=int, default=cfg.get("retries", DEFAULT_RETRIES))
     parser.add_argument("--workers", type=int, default=cfg.get("workers", DEFAULT_WORKERS))
     parser.add_argument("--member-id", default=cfg.get("member_id"))
     parser.add_argument("--pass-hash", default=cfg.get("pass_hash"))
-    parser.add_argument("--cookies", default=cfg.get("cookies"), help="Full cookie string from browser console")
+    parser.add_argument("--cookies", default=cfg.get("cookies"))
     parser.add_argument("--hires", action="store_true", default=cfg.get("hires", False))
     parser.add_argument("--log-file", default=cfg.get("log_file"))
     args = parser.parse_args()
@@ -242,6 +184,34 @@ def main():
 
     if args.hires and not (args.cookies or (args.member_id and args.pass_hash)):
         log.error("--hires requires login cookies.")
+        return
+
+    cookie_kwargs = {
+        "member_id": args.member_id,
+        "pass_hash": args.pass_hash,
+        "cookie_str": args.cookies,
+    }
+
+    if args.retry_failed:
+        gallery_url, failed_urls = load_failed(args.retry_failed)
+        if args.urls:
+            gallery_url = args.urls[0]
+        if not gallery_url:
+            log.error("Could not find gallery URL. Ensure failed.txt has a '# gallery:' line or pass the URL as an argument.")
+            return
+        if not failed_urls:
+            log.info("No failed URLs found in failed.txt. Nothing to retry.")
+            return
+        download_gallery(
+            cookie_kwargs=cookie_kwargs,
+            gallery_url=gallery_url,
+            output=args.output,
+            delay=args.delay,
+            hires=args.hires,
+            retries=args.retries,
+            workers=args.workers,
+            retry_urls=failed_urls,
+        )
         return
 
     gallery_urls = list(args.urls)
@@ -260,11 +230,9 @@ def main():
         log.error("No gallery URLs provided.")
         return
 
-    session = make_session(args.member_id, args.pass_hash, args.cookies)
-
     for url in gallery_urls:
         download_gallery(
-            session=session,
+            cookie_kwargs=cookie_kwargs,
             gallery_url=url,
             output=args.output,
             delay=args.delay,
