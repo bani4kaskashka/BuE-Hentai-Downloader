@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 echo ===================================
-echo   E-H Gallery Downloader
+echo   BuE-Hentai Downloader
 echo ===================================
 echo.
 
