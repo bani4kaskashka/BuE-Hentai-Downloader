@@ -15,6 +15,7 @@ Downloads galleries from e-hentai as images. Useful if torrents aren't an option
 - Batch mode - download a whole list of galleries from a text file
 - Retry failed pages only, without re-downloading everything
 - Skips already downloaded files so interrupted downloads can be resumed
+- Saves login cookies locally so you only have to paste them once
 - Optional config file to save your preferred settings
 
 ---
@@ -62,6 +63,20 @@ Run `run.bat` and follow the prompts:
 4. **Batch mode** - download multiple galleries from a text file, or just paste a single URL
 
 Images are saved to `downloads/<gallery title>/` inside the project folder, numbered `001.jpg`, `002.jpg`, etc.
+
+### Saved login
+
+The first time you log in, your cookie string is saved to `cookies.txt` in the project folder. On the next run, `run.bat` will detect it and offer:
+
+```
+[1] Use saved login
+[2] Log in again (replaces saved)
+[3] Continue without login
+```
+
+Cookies stay valid for roughly 30 days. When they expire and downloads start failing, pick "Log in again" to refresh them.
+
+`cookies.txt` is listed in `.gitignore` and will never be pushed to the repo.
 
 ### Getting your cookie string
 
