@@ -2,6 +2,25 @@
 
 Downloads galleries from e-hentai as images. Useful if torrents aren't an option.
 
+## Getting the project
+
+You will need [Git](https://git-scm.com/downloads) and [Python 3.10+](https://www.python.org/downloads/) installed first.
+
+Open a terminal (press `Win + R`, type `cmd`, hit Enter) and run:
+
+```
+git clone https://github.com/bani4kaskashka/BuE-Hentai-Downloader.git
+cd BuE-Hentai-Downloader
+```
+
+That downloads the project to a folder called `BuE-Hentai-Downloader` wherever you ran the command. You only need to do this once.
+
+If the project gets updated later and you want the latest version, open a terminal inside the folder and run:
+
+```
+git pull
+```
+
 ## Requirements
 
 - Python 3.10+
@@ -19,7 +38,7 @@ Run `run.bat` and follow the prompts:
 3. **Original resolution** - only available when logged in, downloads the uncompressed originals instead of the viewer-resized versions
 4. **Gallery URL** - paste the gallery URL (e.g. `https://e-hentai.org/g/XXXXX/XXXXXXXXXX/`)
 
-Images are saved to `downloads/<gallery title>/` in the script's folder, numbered `001.jpg`, `002.jpg`, etc. Interrupted downloads can be resumed — already downloaded files are skipped.
+Images are saved to `downloads/<gallery title>/` in the script's folder, numbered `001.jpg`, `002.jpg`, etc. Interrupted downloads can be resumed, already downloaded files are skipped.
 
 ### Getting your cookies
 
