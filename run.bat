@@ -28,32 +28,72 @@ if errorlevel 1 (
 )
 echo.
 
-:: Login (asked once per session)
-set USE_LOGIN=n
-set /p USE_LOGIN="Log in with your account? (y/n): "
-
+:: -----------------------------------------------
+:: Login
+:: -----------------------------------------------
 set COOKIES_ARG=
 set HIRES_ARG=
 
-if /i "!USE_LOGIN!"=="y" (
+if exist "cookies.txt" (
+    echo  A saved login was found.
+    echo  [1] Use saved login
+    echo  [2] Log in again  ^(replaces saved^)
+    echo  [3] Continue without login
     echo.
-    echo  How to get your cookie string:
-    echo  1. Open e-hentai.org in your browser and log in
-    echo  2. Press F12 to open DevTools, go to the Console tab
-    echo  3. Type:  document.cookie  and press Enter
-    echo  4. Copy the full output and paste it below
+    set LOGIN_CHOICE=1
+    set /p LOGIN_CHOICE="  Choice (1/2/3): "
+) else (
+    echo  [1] Log in
+    echo  [2] Continue without login
     echo.
-    set /p COOKIE_STR="  Paste cookie string: "
-    set COOKIES_ARG=--cookies "!COOKIE_STR!"
+    set LOGIN_CHOICE=2
+    set /p LOGIN_CHOICE="  Choice (1/2): "
+    :: Remap so the rest of the logic is consistent
+    if "!LOGIN_CHOICE!"=="1" set LOGIN_CHOICE=2_fresh
+    if "!LOGIN_CHOICE!"=="2" set LOGIN_CHOICE=3
+)
+
+if "!LOGIN_CHOICE!"=="1" (
+    :: Load saved cookies
+    set /p SAVED_COOKIES=<cookies.txt
+    set COOKIES_ARG=--cookies "!SAVED_COOKIES!"
+    echo  [+] Using saved login.
     echo.
     set USE_HIRES=n
     set /p USE_HIRES="  Download original resolution? (y/n): "
     if /i "!USE_HIRES!"=="y" set HIRES_ARG=--hires
 )
 
+if "!LOGIN_CHOICE!"=="2" goto :do_fresh_login
+if "!LOGIN_CHOICE!"=="2_fresh" goto :do_fresh_login
+goto :after_login
+
+:do_fresh_login
+echo.
+echo  How to get your cookie string:
+echo  1. Open e-hentai.org in your browser and log in
+echo  2. Press F12 to open DevTools, go to the Console tab
+echo  3. Type:  document.cookie  and press Enter
+echo  4. Copy the full output and paste it below
+echo.
+set /p COOKIE_STR="  Paste cookie string: "
+set COOKIES_ARG=--cookies "!COOKIE_STR!"
+
+:: Save to file
+echo !COOKIE_STR!>cookies.txt
+echo  [+] Login saved to cookies.txt
+echo.
+set USE_HIRES=n
+set /p USE_HIRES="  Download original resolution? (y/n): "
+if /i "!USE_HIRES!"=="y" set HIRES_ARG=--hires
+
+:after_login
+
+:: -----------------------------------------------
+:: Download loop
+:: -----------------------------------------------
 :download_loop
 
-:: Single or batch
 echo.
 set BATCH_MODE=n
 set /p BATCH_MODE="Download from a URL list file? (y/n): "
