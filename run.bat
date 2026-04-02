@@ -28,7 +28,7 @@ if errorlevel 1 (
 )
 echo.
 
-:: Login
+:: Login (asked once per session)
 set USE_LOGIN=n
 set /p USE_LOGIN="Log in with your account? (y/n): "
 
@@ -51,6 +51,8 @@ if /i "!USE_LOGIN!"=="y" (
     if /i "!USE_HIRES!"=="y" set HIRES_ARG=--hires
 )
 
+:download_loop
+
 :: Single or batch
 echo.
 set BATCH_MODE=n
@@ -70,8 +72,7 @@ if /i "!BATCH_MODE!"=="y" (
     set /p GALLERY_URL="Gallery URL: "
     if "!GALLERY_URL!"=="" (
         echo [!] No URL entered.
-        pause
-        exit /b 1
+        goto download_loop
     )
     set URL_ARG="!GALLERY_URL!"
 )
@@ -83,4 +84,10 @@ echo.
 python downloader.py !URL_ARG! !BATCH_ARG! !COOKIES_ARG! !HIRES_ARG!
 
 echo.
-pause
+set AGAIN=n
+set /p AGAIN="Download another gallery? (y/n): "
+if /i "!AGAIN!"=="y" goto download_loop
+
+echo.
+echo Bye!
+timeout /t 2 >nul
