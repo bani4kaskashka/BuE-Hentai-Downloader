@@ -24,9 +24,9 @@ Downloads galleries from e-hentai as images. Useful if torrents aren't an option
 
 You will need [Git](https://git-scm.com/downloads) and [Python 3.10+](https://www.python.org/downloads/) installed first.
 
-**Windows** — Press `Win + R`, type `cmd`, hit Enter to open a terminal.
+**Windows** - Press `Win + R`, type `cmd`, hit Enter to open a terminal.
 
-**Linux / macOS** — Open a terminal application (e.g. Terminal, Konsole, iTerm2).
+**Linux / macOS** - Open a terminal application (e.g. Terminal, Konsole, iTerm2).
 
 Then run:
 
@@ -51,15 +51,15 @@ git pull
 
 **Linux users:** also make sure `python3-venv` is installed.
 On Debian/Ubuntu: `sudo apt install python3-venv`
-On Arch/Manjaro: it is included with the `python` package — nothing extra needed.
+On Arch/Manjaro: it is included with the `python` package, nothing extra needed.
 
 ---
 
 ## Setup
 
-**Windows** — Double-click `run.bat`. On first run it creates a virtual environment and installs all dependencies automatically.
+**Windows** - Double-click `run.bat`. On first run it creates a virtual environment and installs all dependencies automatically.
 
-**Linux / macOS** — Run `./run.sh` from a terminal inside the project folder:
+**Linux / macOS** - Run `./run.sh` from a terminal inside the project folder:
 
 ```bash
 cd BuE-Hentai-Downloader
