@@ -1,151 +1,163 @@
 #!/usr/bin/env bash
-# BuE-Hentai Downloader — Linux/macOS launcher
+# run.sh — BuE-Hentai Downloader interactive launcher (Linux / macOS)
 set -euo pipefail
 cd "$(dirname "$(realpath "$0")")"
 
-echo "==================================="
-echo "   BuE-Hentai Downloader"
-echo "==================================="
-echo
+# ── ANSI codes ────────────────────────────────────────────────────
+R=$'\033[0m'    B=$'\033[1m'    D=$'\033[2m'
+GRN=$'\033[32m' YLW=$'\033[33m' CYN=$'\033[36m'
+RED=$'\033[31m' WHT=$'\033[97m'
 
-# -----------------------------------------------
-# Virtual environment
-# -----------------------------------------------
-if [ ! -f ".venv/bin/activate" ]; then
-    echo "[*] Creating virtual environment..."
-    python3 -m venv .venv || {
-        echo "[!] Failed to create venv. Make sure Python 3 is installed."
-        exit 1
-    }
+# ── UI primitives ─────────────────────────────────────────────────
+header() {
+    printf '\n'
+    printf "  ${B}${WHT}╭──────────────────────────────────────╮${R}\n"
+    printf "  ${B}${WHT}│        BuE-Hentai Downloader         │${R}\n"
+    printf "  ${B}${WHT}╰──────────────────────────────────────╯${R}\n"
+    printf '\n'
+}
+
+section() { printf "\n  ${B}${CYN}◆ %s${R}\n\n" "$1"; }
+ok()      { printf "    ${GRN}✓${R} %s\n" "$1"; }
+info()    { printf "    ${D}· %s${R}\n" "$1"; }
+warn()    { printf "    ${YLW}!${R} %s\n" "$1"; }
+err()     { printf "    ${RED}✗${R} %s\n" "$1"; exit 1; }
+
+# ask "Prompt text" VARNAME [default]
+ask() {
+    local _p="$1" _v="$2" _d="${3-}"
+    if [[ -n "$_d" ]]; then
+        printf "    ${YLW}›${R} %s ${D}[%s]${R} " "$_p" "$_d"
+    else
+        printf "    ${YLW}›${R} %s " "$_p"
+    fi
+    IFS= read -r "$_v" || true
+    if [[ -z "${!_v}" && -n "$_d" ]]; then
+        printf -v "$_v" '%s' "$_d"
+    fi
+}
+
+# ─────────────────────────────────────────────────────────────────
+header
+
+# ── Environment ──────────────────────────────────────────────────
+section "Environment"
+
+if [[ ! -f ".venv/bin/activate" ]]; then
+    info "Creating virtual environment..."
+    if ! python3 -m venv .venv; then
+        err "Failed to create venv. Is Python 3 installed?"
+    fi
 fi
 
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
-echo "[*] Checking dependencies..."
-pip install -q -r requirements.txt || {
-    echo "[!] Failed to install dependencies."
-    exit 1
-}
-echo
+info "Checking dependencies..."
+if ! pip install -q -r requirements.txt; then
+    err "Failed to install dependencies."
+fi
+ok "Environment ready"
 
-# -----------------------------------------------
-# Login
-# -----------------------------------------------
-COOKIES_ARG=""
-HIRES_ARG=""
+# ── Login ────────────────────────────────────────────────────────
+section "Login"
+
+COOKIE_STR=""
+HIRES=false
 
 ask_hires() {
-    read -rp "  Download original resolution? (y/n): " USE_HIRES
-    USE_HIRES="${USE_HIRES,,}"   # lowercase
-    if [ "$USE_HIRES" = "y" ]; then
-        HIRES_ARG="--hires"
-    fi
+    ask "Download original resolution? (requires GP)" _hires "n"
+    if [[ "${_hires,,}" == "y" ]]; then HIRES=true; fi
 }
 
-if [ -f "cookies.txt" ]; then
-    echo "  A saved login was found."
-    echo "  [1] Use saved login"
-    echo "  [2] Log in again  (replaces saved)"
-    echo "  [3] Continue without login"
-    echo
-    read -rp "  Choice (1/2/3) [1]: " LOGIN_CHOICE
-    LOGIN_CHOICE="${LOGIN_CHOICE:-1}"
-else
-    echo "  [1] Log in"
-    echo "  [2] Continue without login"
-    echo
-    read -rp "  Choice (1/2) [2]: " LOGIN_CHOICE_RAW
-    LOGIN_CHOICE_RAW="${LOGIN_CHOICE_RAW:-2}"
-    # Remap so the rest of the logic is consistent
-    if [ "$LOGIN_CHOICE_RAW" = "1" ]; then
-        LOGIN_CHOICE="2"   # treat as "fresh login" branch
-    else
-        LOGIN_CHOICE="3"   # no login
-    fi
-fi
-
 do_fresh_login() {
-    echo
-    echo "  How to get your cookie string:"
-    echo "  1. Open e-hentai.org in your browser and log in"
-    echo "  2. Press F12 to open DevTools, go to the Console tab"
-    echo "  3. Type:  document.cookie  and press Enter"
-    echo "  4. Copy the full output and paste it below"
-    echo
-    read -rp "  Paste cookie string: " COOKIE_STR
-    COOKIES_ARG="--cookies \"$COOKIE_STR\""
-    echo "$COOKIE_STR" > cookies.txt
-    echo "  [+] Login saved to cookies.txt"
-    echo
+    printf '\n'
+    info "How to get your cookie string:"
+    printf "      ${D}1. Open e-hentai.org and log in${R}\n"
+    printf "      ${D}2. Press F12 and go to the Console tab${R}\n"
+    printf "      ${D}3. Type: document.cookie  and press Enter${R}\n"
+    printf "      ${D}4. Copy the full output${R}\n"
+    printf '\n'
+    ask "Paste cookie string:" COOKIE_STR
+    printf '%s\n' "$COOKIE_STR" > cookies.txt
+    ok "Login saved to cookies.txt"
     ask_hires
 }
 
-case "$LOGIN_CHOICE" in
+if [[ -f "cookies.txt" ]]; then
+    info "Saved login detected"
+    printf '\n'
+    printf "      ${D}1${R}  Use saved login\n"
+    printf "      ${D}2${R}  Log in again\n"
+    printf "      ${D}3${R}  Continue without login\n"
+    printf '\n'
+    ask "Choice" _login_choice "1"
+else
+    printf "      ${D}1${R}  Log in\n"
+    printf "      ${D}2${R}  Continue without login\n"
+    printf '\n'
+    ask "Choice" _login_raw "2"
+    if [[ "$_login_raw" == "1" ]]; then
+        _login_choice="2"
+    else
+        _login_choice="3"
+    fi
+fi
+
+case "$_login_choice" in
     1)
-        SAVED_COOKIES="$(cat cookies.txt)"
-        COOKIES_ARG="--cookies \"$SAVED_COOKIES\""
-        echo "  [+] Using saved login."
-        echo
+        COOKIE_STR="$(cat cookies.txt)"
+        ok "Using saved login"
         ask_hires
         ;;
-    2)
-        do_fresh_login
-        ;;
-    3)
-        # no login
-        ;;
-    *)
-        echo "[!] Invalid choice — continuing without login."
-        ;;
+    2) do_fresh_login ;;
+    3) info "Continuing without login" ;;
+    *) warn "Invalid choice — continuing without login" ;;
 esac
 
-# -----------------------------------------------
-# Download loop
-# -----------------------------------------------
-download_loop() {
-    while true; do
-        echo
-        read -rp "Download from a URL list file? (y/n): " BATCH_MODE
-        BATCH_MODE="${BATCH_MODE,,}"
+# ── Download loop ────────────────────────────────────────────────
+while true; do
+    section "Download"
 
-        URL_ARG=""
-        BATCH_ARG=""
+    printf "      ${D}1${R}  Single gallery URL\n"
+    printf "      ${D}2${R}  Batch file  ${D}(one URL per line)${R}\n"
+    printf '\n'
+    ask "Mode" _dl_mode "1"
 
-        if [ "$BATCH_MODE" = "y" ]; then
-            echo "  Create a .txt file with one gallery URL per line."
-            echo "  Lines starting with # are treated as comments and ignored."
-            echo
-            read -rp "  Path to file: " BATCH_FILE
-            BATCH_ARG="--batch \"$BATCH_FILE\""
-        else
-            echo
-            read -rp "Gallery URL: " GALLERY_URL
-            if [ -z "$GALLERY_URL" ]; then
-                echo "[!] No URL entered."
-                continue
-            fi
-            URL_ARG="\"$GALLERY_URL\""
+    GALLERY_URL=""
+    BATCH_FILE=""
+
+    if [[ "$_dl_mode" == "2" ]]; then
+        info "One gallery URL per line. Lines starting with # are ignored."
+        printf '\n'
+        ask "Path to file:" BATCH_FILE
+    else
+        ask "Gallery URL:" GALLERY_URL
+        if [[ -z "$GALLERY_URL" ]]; then
+            warn "No URL entered."
+            continue
         fi
+    fi
 
-        echo
-        echo "[*] Starting download..."
-        echo
+    # Build command array — no eval, no quoting hacks
+    cmd=(python3 downloader.py)
+    if [[ -n "$GALLERY_URL" ]]; then cmd+=("$GALLERY_URL"); fi
+    if [[ -n "$BATCH_FILE"  ]]; then cmd+=(--batch "$BATCH_FILE"); fi
+    if [[ -n "$COOKIE_STR"  ]]; then cmd+=(--cookies "$COOKIE_STR"); fi
+    if [[ "$HIRES" == true  ]]; then cmd+=(--hires); fi
 
-        # eval lets quoted args with spaces pass correctly to python
-        eval python3 downloader.py $URL_ARG $BATCH_ARG $COOKIES_ARG $HIRES_ARG
+    printf '\n'
+    info "Starting download..."
+    printf '\n'
 
-        echo
-        read -rp "Download another gallery? (y/n): " AGAIN
-        AGAIN="${AGAIN,,}"
-        if [ "$AGAIN" != "y" ]; then
-            break
-        fi
-    done
-}
+    "${cmd[@]}"
 
-download_loop
+    printf '\n'
+    ask "Download another gallery?" _again "n"
+    if [[ "${_again,,}" != "y" ]]; then break; fi
+done
 
-echo
-echo "Bye!"
-sleep 2
+section "Done"
+info "Goodbye."
+printf '\n'
+sleep 1
