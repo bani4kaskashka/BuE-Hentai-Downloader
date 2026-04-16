@@ -1,7 +1,27 @@
+# Python
 .venv/
-downloads/
 __pycache__/
 *.pyc
 *.pyo
-.env
+*.pyd
+
+# Downloads and runtime output
+downloads/
+*.log
+
+# User config and auth — never commit these
 cookies.txt
+config.json
+.env
+
+# Temp files from interrupted downloads
+*.tmp
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE folders
+.idea/
+.vscode/
