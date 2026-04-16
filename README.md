@@ -24,7 +24,11 @@ Downloads galleries from e-hentai as images. Useful if torrents aren't an option
 
 You will need [Git](https://git-scm.com/downloads) and [Python 3.10+](https://www.python.org/downloads/) installed first.
 
-Open a terminal (press `Win + R`, type `cmd`, hit Enter) and run:
+**Windows** — Press `Win + R`, type `cmd`, hit Enter to open a terminal.
+
+**Linux / macOS** — Open a terminal application (e.g. Terminal, Konsole, iTerm2).
+
+Then run:
 
 ```
 git clone https://github.com/bani4kaskashka/BuE-Hentai-Downloader.git
@@ -45,17 +49,35 @@ git pull
 
 - Python 3.10+
 
+**Linux users:** also make sure `python3-venv` is installed.
+On Debian/Ubuntu: `sudo apt install python3-venv`
+On Arch/Manjaro: it is included with the `python` package — nothing extra needed.
+
 ---
 
 ## Setup
 
-Double-click `run.bat`. On first run it creates a virtual environment and installs all dependencies automatically.
+**Windows** — Double-click `run.bat`. On first run it creates a virtual environment and installs all dependencies automatically.
+
+**Linux / macOS** — Run `./run.sh` from a terminal inside the project folder:
+
+```bash
+cd BuE-Hentai-Downloader
+./run.sh
+```
+
+On first run it creates a virtual environment and installs all dependencies automatically. If you get a "Permission denied" error, make the script executable first:
+
+```bash
+chmod +x run.sh
+./run.sh
+```
 
 ---
 
 ## Usage
 
-Run `run.bat` and follow the prompts:
+Run `run.bat` (Windows) or `./run.sh` (Linux / macOS) and follow the prompts:
 
 1. **Login** - choose whether to use your account or not
 2. **Cookie string** - if logging in, paste your cookie string from the browser console (see below)
@@ -66,7 +88,7 @@ Images are saved to `downloads/<gallery title>/` inside the project folder, numb
 
 ### Saved login
 
-The first time you log in, your cookie string is saved to `cookies.txt` in the project folder. On the next run, `run.bat` will detect it and offer:
+The first time you log in, your cookie string is saved to `cookies.txt` in the project folder. On the next run, `run.bat` / `run.sh` will detect it and offer:
 
 ```
 [1] Use saved login
@@ -96,7 +118,7 @@ https://e-hentai.org/g/YYYYY/YYYYYYYYYY/
 https://e-hentai.org/g/ZZZZZ/ZZZZZZZZZZ/
 ```
 
-Then choose "y" when `run.bat` asks about URL list mode and point it to that file.
+Then choose "y" when `run.bat` / `run.sh` asks about URL list mode and point it to that file.
 
 ### Retrying failed pages
 
@@ -154,7 +176,7 @@ If you want persistent settings without typing them every time, create a `config
 }
 ```
 
-Any setting in `config.json` becomes your new default. CLI arguments and `run.bat` prompts still override it.
+Any setting in `config.json` becomes your new default. CLI arguments and `run.bat` / `run.sh` prompts still override it.
 
 ---
 
@@ -165,6 +187,7 @@ downloader.py   main entry point and orchestration
 session.py      session creation, cookie handling, HTTP retries
 scraper.py      HTML parsing, image URL extraction, page issue detection
 run.bat         interactive launcher for Windows
+run.sh          interactive launcher for Linux / macOS
 ```
 
 ---
