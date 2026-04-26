@@ -32,6 +32,10 @@ ask() {
         printf "    ${YLW}›${R} %s " "$_p"
     fi
     IFS= read -r "$_v" || true
+    local _t="${!_v}"
+    _t="${_t#"${_t%%[![:space:]]*}"}"
+    _t="${_t%"${_t##*[![:space:]]}"}"
+    printf -v "$_v" '%s' "$_t"
     if [[ -z "${!_v}" && -n "$_d" ]]; then
         printf -v "$_v" '%s' "$_d"
     fi
