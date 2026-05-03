@@ -23,10 +23,13 @@ info()    { printf "    ${D}· %s${R}\n" "$1"; }
 warn()    { printf "    ${YLW}!${R} %s\n" "$1"; }
 err()     { printf "    ${RED}✗${R} %s\n" "$1"; exit 1; }
 
-# ask "Prompt text" VARNAME [default]
+# ask "Prompt text" VARNAME [default] [hint]
+# hint overrides the displayed default label (e.g. "y/N")
 ask() {
-    local _p="$1" _v="$2" _d="${3-}"
-    if [[ -n "$_d" ]]; then
+    local _p="$1" _v="$2" _d="${3-}" _h="${4-}"
+    if [[ -n "$_h" ]]; then
+        printf "    ${YLW}›${R} %s ${D}(%s)${R} " "$_p" "$_h"
+    elif [[ -n "$_d" ]]; then
         printf "    ${YLW}›${R} %s ${D}[%s]${R} " "$_p" "$_d"
     else
         printf "    ${YLW}›${R} %s " "$_p"
@@ -70,8 +73,8 @@ COOKIE_STR=""
 HIRES=false
 
 ask_hires() {
-    ask "Download original resolution? (requires GP)" _hires "n"
-    if [[ "${_hires,,}" == "y" ]]; then HIRES=true; fi
+    ask "Download original resolution? (requires GP)" _hires "n" "y/N"
+    case "$_hires" in [yY]) HIRES=true ;; esac
 }
 
 do_fresh_login() {
@@ -154,14 +157,13 @@ while true; do
     info "Starting download..."
     printf '\n'
 
-    "${cmd[@]}"
+    "${cmd[@]}" || true
 
     printf '\n'
-    ask "Download another gallery?" _again "n"
-    if [[ "${_again,,}" != "y" ]]; then break; fi
+    ask "Download another gallery?" _again "n" "y/N"
+    case "$_again" in [yY]) ;; *) break ;; esac
 done
 
 section "Done"
 info "Goodbye."
 printf '\n'
-sleep 1
