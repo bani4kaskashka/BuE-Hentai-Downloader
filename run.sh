@@ -58,7 +58,7 @@ fi
 source .venv/bin/activate
 
 info "Checking dependencies..."
-if ! pip install -q -r requirements.txt; then
+if ! .venv/bin/python3 -m pip install -q -r requirements.txt; then
     err "Failed to install dependencies."
 fi
 ok "Environment ready"
@@ -144,7 +144,7 @@ while true; do
     fi
 
     # Build command array — no eval, no quoting hacks
-    cmd=(python3 downloader.py)
+    cmd=(.venv/bin/python3 downloader.py)
     if [[ -n "$GALLERY_URL" ]]; then cmd+=("$GALLERY_URL"); fi
     if [[ -n "$BATCH_FILE"  ]]; then cmd+=(--batch "$BATCH_FILE"); fi
     if [[ -n "$COOKIE_STR"  ]]; then cmd+=(--cookies "$COOKIE_STR"); fi
